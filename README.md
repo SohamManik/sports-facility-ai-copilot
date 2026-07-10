@@ -1,30 +1,40 @@
-# HobbyFi Copilot
+<div align="center">
+  <h1>🎯 HobbyFi Copilot</h1>
+  <p><strong>An AI-powered natural language interface for sports facility vendors</strong></p>
+</div>
 
-HobbyFi Copilot is an AI-powered natural language interface for sports facility vendors. It integrates directly into a React-based vendor CRM portal, allowing vendors to query their data and execute complex bulk updates using natural language instead of complex dashboards.
+HobbyFi Copilot transforms how sports facility vendors interact with their CRM data. Instead of navigating complex dashboards to find expiring trials, check revenue, or cancel memberships, vendors can simply type what they want in plain English. The Copilot translates these intents into safe, validated SQL operations and executes them.
 
-## Features
+---
 
-- **Natural Language Queries**: Ask questions like "What is my total membership revenue so far?" or "Show me all active trials for my academy."
-- **Safe Database Mutations**: Instruct the AI to update records, e.g., "Cancel Rahul Verma and Priya Sharma's badminton trials."
-- **5-Layer Security & Guardrails**:
-  1. **Length Control**: Blocks excessively long prompt injections.
-  2. **Injection Prevention**: Scans for common jailbreaks (`ignore previous`) and destructive commands (`DROP TABLE`).
-  3. **Scope Enforcement**: Refuses to answer queries that fall outside of the CRM domain (e.g. asking for a poem).
-  4. **SQL Validation**: Strictly enforces that read intents only produce `SELECT` statements, and writes only produce `UPDATE` targeting allowed tables.
-  5. **PII Masking**: Automatically redacts sensitive phone numbers and emails in the output.
+## ✨ Features
+
+- **Natural Language Queries**: Ask questions like *"What is my total membership revenue so far?"* or *"Show me all active trials for my academy."*
+- **Safe Database Mutations**: Instruct the AI to update records, e.g., *"Cancel Rahul Verma and Priya Sharma's badminton trials."*
+- **Disambiguation Engine**: If a vendor asks to cancel *"Rohan's trial"*, but multiple Rohans exist, the backend detects the ambiguity and pauses to ask the user which one they meant.
 - **Human-in-the-Loop (HITL)**: All database mutations calculate a JSON diff and pause for explicit vendor approval via a visual frosted-glass UI card.
-- **Disambiguation Engine**: If a vendor asks to cancel "Rohan's trial", but multiple Rohans exist, the backend detects the ambiguity and pauses to ask the user which one they meant.
 - **Premium Aesthetics**: Built with a sleek, dark-mode glassmorphism design language using TailwindCSS.
 
-## Architecture
+## 🛡️ 5-Layer Security & Guardrails
 
-The backend is built with FastAPI and SQLite, orchestrating multiple LLM agents via LangChain and NVIDIA NIM (`meta/llama-3.1-70b-instruct` and `8b-instruct`).
+AI interfaces dealing with real databases must be incredibly secure. We built a robust 5-layer defense mechanism:
 
-1. **Orchestrator Agent (8B Model)**: Rapidly classifies the raw user prompt into `READ`, `WRITE`, `CONVERSATIONAL`, or `OUT_OF_SCOPE`.
-2. **Query Agent (70B Model)**: Generates safe `SELECT` statements, executes them against SQLite, and formulates the data into clean Markdown tables.
-3. **Action Agent (70B Model)**: Generates `UPDATE` statements for modifying user states. It calculates a "Proposed State" diff but **does not execute the query** until approved.
+1. **Length Constraints**: Hard limits on input length to prevent buffer bloat and excessive token consumption.
+2. **Prompt Injection Prevention**: Blocks malicious keywords (`drop table`, `ignore previous instructions`, etc.).
+3. **Domain Scope Enforcement**: Rejects queries unrelated to CRM data (e.g., *"write a poem"*).
+4. **SQL Validation**:
+   - `READ` operations are strictly limited to `SELECT` queries.
+   - `WRITE` operations must be `UPDATE` queries, must enforce `vendor_id` scoping, and are strictly restricted to `trials`, `bookings`, and `memberships` tables (protecting the `users` and `revenue` tables from being modified).
+5. **PII Masking**: Automatically detects and redacts sensitive information (emails, phone numbers) before data is presented to the user.
 
-## Running Locally
+## 🧠 Multi-Agent Architecture
+
+To balance speed and intelligence, we implemented a dual-model orchestration layer using `ChatNVIDIA` LangChain integrations:
+
+- **The Orchestrator (meta/llama-3.1-8b-instruct)**: A blazing-fast router that classifies user input into `READ`, `WRITE`, `CONVERSATIONAL`, or `OUT_OF_SCOPE`. By offloading routing to an 8B model, we achieved near-instant responsiveness for initial intent classification.
+- **The Specialists (meta/llama-3.1-70b-instruct)**: For complex reasoning, schema navigation, and SQL generation, we utilized the powerful 70B model. This ensures that the generated SQL perfectly maps to the database structure, properly utilizes `IN` clauses for multi-user actions, and respects the vendor's scope.
+
+## 🛠️ Running Locally
 
 ### Backend Setup
 1. Navigate to the `backend` directory.
@@ -34,7 +44,7 @@ The backend is built with FastAPI and SQLite, orchestrating multiple LLM agents 
    - Mac/Linux: `source venv/bin/activate`
 4. Install dependencies: `pip install -r requirements.txt` (or install FastAPI, Uvicorn, SQLAlchemy, LangChain, etc.)
 5. Create a `.env` file and add your NVIDIA API key: `NVIDIA_API_KEY=your_key_here`
-6. Run the database seed script to populate dummy data: `python seed.py`
+6. Run the database seed script to populate dummy data: `python seed_data.py`
 7. Start the API server: `python -m uvicorn main:app --reload`
 
 ### Frontend Setup
