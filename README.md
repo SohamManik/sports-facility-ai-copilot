@@ -34,6 +34,52 @@ To balance speed and intelligence, we implemented a dual-model orchestration lay
 - **The Orchestrator (meta/llama-3.1-8b-instruct)**: A blazing-fast router that classifies user input into `READ`, `WRITE`, `CONVERSATIONAL`, or `OUT_OF_SCOPE`. By offloading routing to an 8B model, we achieved near-instant responsiveness for initial intent classification.
 - **The Specialists (meta/llama-3.1-70b-instruct)**: For complex reasoning, schema navigation, and SQL generation, we utilized the powerful 70B model. This ensures that the generated SQL perfectly maps to the database structure, properly utilizes `IN` clauses for multi-user actions, and respects the vendor's scope.
 
+### Architecture Flowchart
+
+```mermaid
+graph TD
+    classDef frontend fill:#1e293b,stroke:#3b82f6,stroke-width:2px,color:#fff;
+    classDef backend fill:#0f172a,stroke:#8b5cf6,stroke-width:2px,color:#fff;
+    classDef agent fill:#4c1d95,stroke:#a78bfa,stroke-width:2px,color:#fff;
+    classDef guard fill:#991b1b,stroke:#f87171,stroke-width:2px,color:#fff;
+    classDef db fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#fff;
+
+    User([👤 User Prompt]) --> UI[💻 React Frontend]:::frontend
+    UI --> API[⚙️ FastAPI Backend]:::backend
+
+    API --> G1{L1: Length Guard}:::guard
+    G1 -- Pass --> G2{L2: Injection Guard}:::guard
+    G2 -- Pass --> Orch[🧠 Orchestrator Agent<br/>meta/llama-3.1-8b]:::agent
+
+    Orch -- "Intent: OUT_OF_SCOPE" --> G3{L3: Scope Guard}:::guard
+    G3 --> Reject[❌ Reject Request]:::backend
+
+    Orch -- "Intent: CONVERSATIONAL" --> Chat[💬 Return Chat Message]:::backend
+
+    %% READ PATH
+    Orch -- "Intent: READ" --> Query[🔍 Query Agent<br/>meta/llama-3.1-70b]:::agent
+    Query --> SQL_R[Generate SELECT SQL]:::backend
+    SQL_R --> DB[(🗄️ SQLite Database)]:::db
+    DB --> Format[Format Data into Table]:::backend
+    Format --> PII{L5: PII Masking}:::guard
+    PII --> Return_R[📊 Return Markdown Table]:::frontend
+
+    %% WRITE PATH
+    Orch -- "Intent: WRITE" --> Action[⚡ Action Agent<br/>meta/llama-3.1-70b]:::agent
+    Action --> SQL_W[Generate UPDATE SQL]:::backend
+    SQL_W --> G4{L4: Validation Guard<br/>Allowed Tables Only}:::guard
+    G4 -- Pass --> Disambig{Disambiguation Engine}:::backend
+    
+    Disambig -- Multiple Matches --> AskUser[❓ Ask User to Select One]:::frontend
+    Disambig -- Exact Match --> Diff[📄 Generate JSON Diff]:::backend
+    Diff --> HITL{✋ Human-in-the-Loop<br/>Require Approval}:::frontend
+
+    HITL -- Reject --> Abort[⛔ Action Cancelled]:::backend
+    HITL -- Approve --> Execute[✅ Execute UPDATE]:::db
+    Execute --> Log[📝 Save to Audit Log]:::db
+    Log --> Return_W[🎉 Return Success]:::frontend
+```
+
 ## 🛠️ Running Locally
 
 ### Backend Setup
