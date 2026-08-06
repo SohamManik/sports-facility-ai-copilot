@@ -1,18 +1,6 @@
-# 🚀 OptiSync / HobbyFi AI Copilot
+# 🚀 Sports Facility AI Copilot
 
 An enterprise-grade, agentic AI copilot designed for sports facility vendors. It replaces traditional clunky dashboards with a natural language interface that supports voice commands, complex bulk operations, generative charts, and proactive insights.
-
----
-
-## 🌟 Unique Name Options for this Project
-If you want to rebrand "HobbyFi Copilot" to something more standout for your resume, here are a few options:
-1. **OptiSync AI**: *Suggests optimization and syncing of data.* (Recommended)
-2. **VendorVox**: *Focuses on the voice-command aspect of the CRM.*
-3. **OmniDesk Copilot**: *Implies a comprehensive, all-in-one management tool.*
-4. **Nexus Sports CRM**: *Sounds enterprise-ready and connected.*
-
-**Short Description for GitHub:** 
-> *An asynchronous, multi-agent AI CRM copilot for sports facilities, featuring voice commands, LangGraph routing, and proactive insights.*
 
 ---
 
