@@ -22,21 +22,21 @@ The V2 architecture represents a massive shift from a basic LLM wrapper to an as
 
 ```mermaid
 graph TD
-    A[Vendor Input (Voice/Text)] --> B{LangGraph Intent Classifier}
+    A["Vendor Input (Voice/Text)"] --> B{"LangGraph Intent Classifier"}
     
-    B -->|READ| C[Query Agent]
-    B -->|WRITE| D[Action Agent]
-    B -->|POLICY| E[RAG Policy Agent]
-    B -->|CONVERSATIONAL| F[Chat Agent]
+    B -->|READ| C["Query Agent"]
+    B -->|WRITE| D["Action Agent"]
+    B -->|POLICY| E["RAG Policy Agent"]
+    B -->|CONVERSATIONAL| F["Chat Agent"]
     
-    C --> G[(PostgreSQL DB)]
-    D --> |Structured Output| H[Pending Action Queue]
+    C --> G[("PostgreSQL DB")]
+    D --> |Structured Output| H["Pending Action Queue"]
     H --> |Vendor Approves| G
     
-    E --> I[refund_policy.txt]
+    E --> I["refund_policy.txt"]
     
-    J[Nightly Cron Job] --> |Scan DB| G
-    J --> |Flag Issues| K[Proactive Insights]
+    J["Nightly Cron Job"] --> |Scan DB| G
+    J --> |Flag Issues| K["Proactive Insights"]
 ```
 
 ## 🛠️ Tech Stack
