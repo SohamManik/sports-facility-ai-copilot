@@ -7,6 +7,7 @@ Classify the vendor's message into EXACTLY one of these four categories:
 
 READ   - Vendor wants to fetch, view, list, count, or get information
 WRITE  - Vendor wants to update, extend, cancel, change, or modify data
+POLICY - Vendor is asking about facility rules, refund policies, or cancellation terms
 CONVERSATIONAL - Vendor is asking a general question, confirming a previous action, or chatting naturally (e.g., 'did you cancel it?', 'thanks', 'hello')
 OUT_OF_SCOPE - Message is completely unrelated to CRM operations
 
@@ -15,7 +16,7 @@ Previous conversation:
 
 Vendor message: {message}
 
-Reply with ONLY one word — READ, WRITE, CONVERSATIONAL, or OUT_OF_SCOPE.
+Reply with ONLY one word — READ, WRITE, CONVERSATIONAL, POLICY, or OUT_OF_SCOPE.
 No explanation. No punctuation. Just the one word.
 """
 

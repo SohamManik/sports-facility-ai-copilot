@@ -11,6 +11,14 @@ load_dotenv()
 from guardrails.guards import validate_write_sql, check_bulk_operation
 from prompts import WRITE_ACTION_PROMPT
 from database import PendingAction
+from pydantic import BaseModel, Field
+
+class ActionPlan(BaseModel):
+    action_type: str = Field(description="The type of action: EXTEND_TRIAL, CANCEL_BOOKING, etc.")
+    action_sql: str = Field(description="The SQLite UPDATE statement")
+    proposed_changes: dict = Field(description="Concrete final values of fields that the UPDATE will change")
+    human_readable: str = Field(description="A plain-English description of the action")
+    affected_user: str = Field(description="The name of the user affected")
 
 llm = ChatNVIDIA(
     model="meta/llama-3.1-70b-instruct",
@@ -21,7 +29,7 @@ llm = ChatNVIDIA(
 )
 
 
-def handle_write(message: str, vendor_id: int, chat_history: str, db, disambiguation_context: dict = None) -> dict:
+async def handle_write(message: str, vendor_id: int, chat_history: str, db, disambiguation_context: dict = None) -> dict:
     """
     Handle WRITE intent: generate UPDATE SQL, validate, run pre-flight,
     and return result dict.
@@ -63,30 +71,18 @@ def handle_write(message: str, vendor_id: int, chat_history: str, db, disambigua
                 message=message
             )
 
-            # 2. Call LLM
-            response = llm.invoke(prompt)
-            response_text = response.content.strip()
-
-            # 3. Parse JSON — two-stage parsing
-            cleaned = re.sub(r'```(?:json|sql)?\n?(.*?)\n?```', r'\1', response_text, flags=re.DOTALL).strip()
-
+            # 2. Call LLM with Structured Output
+            llm_with_struct = llm.with_structured_output(ActionPlan)
             try:
-                parsed = json.loads(cleaned)
-            except json.JSONDecodeError:
-                match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-                if match:
-                    try:
-                        parsed = json.loads(match.group())
-                    except json.JSONDecodeError:
-                        return {"response": "I couldn't plan that action. Please rephrase.", "intent": "CONVERSATIONAL", "pending_action_id": None}
-                else:
-                    return {"response": "I couldn't plan that action. Please rephrase.", "intent": "CONVERSATIONAL", "pending_action_id": None}
-
-            action_type = parsed.get("action_type", "UNKNOWN")
-            action_sql = parsed.get("action_sql", "")
-            human_readable = parsed.get("human_readable", "")
-            affected_user = parsed.get("affected_user", "")
-            proposed_changes = parsed.get("proposed_changes", {})
+                parsed_plan = llm_with_struct.invoke(prompt)
+            except Exception as e:
+                return {"response": "I couldn't plan that action. Please rephrase.", "intent": "CONVERSATIONAL", "pending_action_id": None}
+            
+            action_type = parsed_plan.action_type
+            action_sql = parsed_plan.action_sql
+            human_readable = parsed_plan.human_readable
+            affected_user = parsed_plan.affected_user
+            proposed_changes = parsed_plan.proposed_changes
             affected_user_id = None
 
             if not action_sql:
@@ -110,7 +106,7 @@ def handle_write(message: str, vendor_id: int, chat_history: str, db, disambigua
             if subquery_match:
                 name_pattern = subquery_match.group(1)
                 try:
-                    check_result = db.execute(
+                    check_result = await db.execute(
                         text("SELECT id, name FROM users WHERE name LIKE :pattern"),
                         {"pattern": name_pattern}
                     )
@@ -161,12 +157,13 @@ def handle_write(message: str, vendor_id: int, chat_history: str, db, disambigua
 
         if target_table != "unknown" and affected_user_id:
             try:
-                res = db.execute(
+                res = await db.execute(
                     text(f"SELECT * FROM {target_table} WHERE user_id = :uid AND vendor_id = :vid LIMIT 1"),
                     {"uid": affected_user_id, "vid": vendor_id}
-                ).fetchone()
-                if res:
-                    row_dict = dict(res._mapping)
+                )
+                res_row = res.fetchone()
+                if res_row:
+                    row_dict = dict(res_row._mapping)
                     for k, v in row_dict.items():
                         if isinstance(v, (datetime, date)):
                             row_dict[k] = v.isoformat()
@@ -196,8 +193,8 @@ def handle_write(message: str, vendor_id: int, chat_history: str, db, disambigua
             status="pending"
         )
         db.add(new_action)
-        db.commit()
-        db.refresh(new_action)
+        await db.commit()
+        await db.refresh(new_action)
 
         # 10. Return success
         return {

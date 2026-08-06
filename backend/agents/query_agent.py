@@ -19,7 +19,7 @@ llm = ChatNVIDIA(
 )
 
 
-def handle_read(message: str, vendor_id: int, chat_history: str, db) -> str:
+async def handle_read(message: str, vendor_id: int, chat_history: str, db) -> str:
     """Handle READ intent: generate SQL, validate, execute, format, mask PII."""
     try:
         # 1. Build prompt
@@ -31,7 +31,10 @@ def handle_read(message: str, vendor_id: int, chat_history: str, db) -> str:
         )
 
         # 2. Call LLM
-        response = llm.invoke(prompt)
+        try:
+            response = llm.invoke(prompt)
+        except Exception as e:
+            return "I am having trouble connecting to my brain right now. Please try again."
         response_text = response.content.strip()
 
         # 3. Parse JSON — two-stage parsing (brainstorm D2)
@@ -63,7 +66,7 @@ def handle_read(message: str, vendor_id: int, chat_history: str, db) -> str:
 
         # 5. Execute SQL
         try:
-            result = db.execute(text(sql))
+            result = await db.execute(text(sql))
             rows = result.fetchall()
             columns = list(result.keys())
         except Exception as e:

@@ -6,7 +6,7 @@ import AuditLog from './components/AuditLog'
 import LoginPage from './components/LoginPage'
 import { Sparkles, Shield, ScrollText, LogOut } from 'lucide-react'
 
-const API_BASE = 'http://127.0.0.1:8000'
+const API_BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
 
 function generateId() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -122,6 +122,22 @@ export default function App() {
       })
 
       const contentType = response.headers.get('content-type') || ''
+
+      if (!response.ok) {
+        let errMsg = 'Something went wrong on the server.'
+        if (contentType.includes('application/json')) {
+          const errData = await response.json()
+          errMsg = errData.detail || errData.response || errMsg
+        }
+        setMessages(prev => {
+          const newMsg = [...prev]
+          const lastIdx = newMsg.length - 1
+          newMsg[lastIdx] = { ...newMsg[lastIdx], text: errMsg, intent: 'CONVERSATIONAL', status: null }
+          return newMsg
+        })
+        setIsLoading(false)
+        return
+      }
 
       if (contentType.includes('application/json')) {
         // JSON response — errors, guardrail blocks, disambiguation

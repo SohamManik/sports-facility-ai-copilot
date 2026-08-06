@@ -9,6 +9,7 @@ load_dotenv()
 
 from agents.query_agent import handle_read
 from agents.action_agent import handle_write
+from agents.rag_agent import handle_policy
 from guardrails.guards import check_injection, check_topic_scope, check_message_length
 from memory.session_memory import get_memory, get_history_string
 from prompts import (
@@ -19,6 +20,14 @@ from prompts import (
     MULTI_INTENT_RESPONSE,
     MESSAGE_TOO_LONG_RESPONSE
 )
+from langgraph.graph import StateGraph, END
+from typing import TypedDict
+
+class PreflightState(TypedDict):
+    message: str
+    chat_history: str
+    intent: str
+
 
 llm = ChatNVIDIA(
     model="meta/llama-3.1-8b-instruct",
@@ -45,7 +54,7 @@ def send_token_stream(text_content: str):
         time.sleep(0.02)
 
 
-def process_message_preflight(req, vendor_id: int, db):
+async def process_message_preflight(req, vendor_id: int, db):
     """
     Phase 1: Run all checks that must complete BEFORE streaming begins.
 
@@ -86,21 +95,35 @@ def process_message_preflight(req, vendor_id: int, db):
     if check_multi_intent(message) and not disambiguation_context:
         return {"mode": "json", "payload": {"response": MULTI_INTENT_RESPONSE, "intent": "MULTI_INTENT", "pending_action_id": None}}
 
-    # Intent classification
+    # Intent classification using LangGraph
     chat_history = get_history_string(session_id)
     intent = "WRITE"
+    
     if not disambiguation_context:
-        intent_prompt = INTENT_CLASSIFICATION_PROMPT.format(chat_history=chat_history, message=message)
-        intent_response = llm.invoke(intent_prompt)
-        raw_intent = re.sub(r'[^A-Za-z_]', '', intent_response.content.strip()).upper()
-        if raw_intent == "OUTOFSCOPE": raw_intent = "OUT_OF_SCOPE"
-        valid_intents = {"READ", "WRITE", "CONVERSATIONAL", "OUT_OF_SCOPE"}
-        intent = raw_intent if raw_intent in valid_intents else "OUT_OF_SCOPE"
+        # Define graph nodes
+        def classify_intent(state: PreflightState):
+            intent_prompt = INTENT_CLASSIFICATION_PROMPT.format(chat_history=state["chat_history"], message=state["message"])
+            intent_response = llm.invoke(intent_prompt)
+            raw_intent = re.sub(r'[^A-Za-z_]', '', intent_response.content.strip()).upper()
+            if raw_intent == "OUTOFSCOPE": raw_intent = "OUT_OF_SCOPE"
+            valid_intents = {"READ", "WRITE", "CONVERSATIONAL", "OUT_OF_SCOPE", "POLICY"}
+            return {"intent": raw_intent if raw_intent in valid_intents else "OUT_OF_SCOPE"}
+
+        # Build graph
+        workflow = StateGraph(PreflightState)
+        workflow.add_node("classify", classify_intent)
+        workflow.set_entry_point("classify")
+        workflow.add_edge("classify", END)
+        app = workflow.compile()
+        
+        # Execute graph
+        final_state = await app.ainvoke({"message": message, "chat_history": chat_history, "intent": ""})
+        intent = final_state["intent"]
 
     if intent == "OUT_OF_SCOPE":
         return {"mode": "json", "payload": {"response": OUT_OF_SCOPE_RESPONSE, "intent": "OUT_OF_SCOPE", "pending_action_id": None}}
 
-    if intent in ("READ", "CONVERSATIONAL"):
+    if intent in ("READ", "CONVERSATIONAL", "POLICY"):
         # READ and CONVERSATIONAL are always streamed
         return {
             "mode": "stream",
@@ -112,7 +135,7 @@ def process_message_preflight(req, vendor_id: int, db):
         }
 
     # WRITE — run pre-flight BEFORE streaming
-    result = handle_write(message, vendor_id, chat_history, db, disambiguation_context)
+    result = await handle_write(message, vendor_id, chat_history, db, disambiguation_context)
 
     if result.get("intent") == "AMBIGUOUS":
         # Disambiguation — return JSON immediately (no stream)
@@ -133,7 +156,7 @@ def process_message_preflight(req, vendor_id: int, db):
     }
 
 
-def process_message_stream(preflight_result, vendor_id: int, db):
+async def process_message_stream(preflight_result, vendor_id: int, db):
     """
     Phase 2: SSE generator. Only called when preflight returned mode="stream".
     """
@@ -154,7 +177,7 @@ def process_message_stream(preflight_result, vendor_id: int, db):
     if intent == "READ":
         yield send_event("status", "Querying database...")
         chat_history = preflight_result["chat_history"]
-        response_text = handle_read(message, vendor_id, chat_history, db)
+        response_text = await handle_read(message, vendor_id, chat_history, db)
         memory.chat_memory.add_user_message(message)
         memory.chat_memory.add_ai_message(response_text)
         yield from send_token_stream(response_text)
@@ -184,4 +207,13 @@ def process_message_stream(preflight_result, vendor_id: int, db):
         memory.chat_memory.add_user_message(message)
         memory.chat_memory.add_ai_message(full_text)
         yield send_event("message", {"response": full_text, "intent": "CONVERSATIONAL", "pending_action_id": None})
+        
+    elif intent == "POLICY":
+        yield send_event("status", "Checking policies...")
+        chat_history = preflight_result["chat_history"]
+        response_text = await handle_policy(message, chat_history)
+        memory.chat_memory.add_user_message(message)
+        memory.chat_memory.add_ai_message(response_text)
+        yield from send_token_stream(response_text)
+        yield send_event("message", {"response": response_text, "intent": "POLICY", "pending_action_id": None})
 

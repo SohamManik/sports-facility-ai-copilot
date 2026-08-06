@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: hobbyfi-copilot-backend
+    env: python
+    buildCommand: "cd backend && pip install -r requirements.txt"
+    startCommand: "cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: FRONTEND_URL
+        value: "https://your-vercel-deployment-url.vercel.app" # To be updated by user in Render dashboard
+      - key: NVIDIA_API_KEY
+        sync: false # User needs to set this securely in Render Dashboard
