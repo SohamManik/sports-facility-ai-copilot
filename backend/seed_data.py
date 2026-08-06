@@ -12,8 +12,7 @@ import asyncio
 async def seed():
     """Seed the database with initial data. Idempotent — skips if data exists."""
     async with SessionLocal() as db:
-        try:
-            # Skip seeding if data already exists
+        # Skip seeding if data already exists
             result = await db.execute(select(User))
             if len(result.fetchall()) > 0:
                 print("Database already seeded. Skipping.")
@@ -202,13 +201,6 @@ async def seed():
 
         await db.commit()
         print("Database seeded successfully with all data.")
-
-    except Exception as e:
-        await db.rollback()
-        print(f"Error seeding database: {e}")
-        raise
-    finally:
-        db.close()
 
 
 if __name__ == "__main__":
