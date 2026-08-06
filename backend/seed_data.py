@@ -13,10 +13,10 @@ async def seed():
     """Seed the database with initial data. Idempotent — skips if data exists."""
     async with SessionLocal() as db:
         # Skip seeding if data already exists
-            result = await db.execute(select(User))
-            if len(result.fetchall()) > 0:
-                print("Database already seeded. Skipping.")
-                return
+        result = await db.execute(select(User))
+        if len(result.fetchall()) > 0:
+            print("Database already seeded. Skipping.")
+            return
 
         # ── Vendors ──────────────────────────────────────────────────────
         vendors = [
@@ -112,7 +112,6 @@ async def seed():
 
         # ── Bookings (20 total) ─────────────────────────────────────────
         bookings = [
-            # Historical bookings — vendor 1 (Kota Badminton Academy)
             Booking(id=1,  user_id=3,  vendor_id=1, facility="Court A",
                     booking_date=(date.today() + timedelta(days=-19)), slot_time="09:00-10:00",
                     amount=600, status="completed"),
@@ -143,7 +142,6 @@ async def seed():
             Booking(id=10, user_id=4,  vendor_id=1, facility="Court B",
                     booking_date=(date.today() + timedelta(days=-2)),  slot_time="18:00-19:00",
                     amount=450, status="confirmed"),
-            # Historical bookings — vendor 2 (Zenith Yoga Studio)
             Booking(id=11, user_id=6,  vendor_id=2, facility="Studio 1",
                     booking_date=(date.today() + timedelta(days=-17)), slot_time="06:00-07:00",
                     amount=300, status="completed"),
@@ -156,7 +154,6 @@ async def seed():
             Booking(id=14, user_id=6,  vendor_id=2, facility="Studio 2",
                     booking_date=(date.today() + timedelta(days=-4)),  slot_time="18:00-19:00",
                     amount=150, status="cancelled"),
-            # Historical bookings — vendor 3 (Champion Football Ground)
             Booking(id=15, user_id=10, vendor_id=3, facility="Ground A",
                     booking_date=(date.today() + timedelta(days=-16)), slot_time="16:00-17:00",
                     amount=500, status="completed"),
@@ -166,7 +163,6 @@ async def seed():
             Booking(id=17, user_id=4,  vendor_id=3, facility="Ground A",
                     booking_date=(date.today() + timedelta(days=-1)),  slot_time="15:00-16:00",
                     amount=500, status="confirmed"),
-            # Today's bookings — vendor 1, 2026-07-09, total = 1800
             Booking(id=18, user_id=5,  vendor_id=1, facility="Court A",
                     booking_date=(date.today() + timedelta(days=0)),  slot_time="09:00-10:00",
                     amount=600, status="confirmed"),
@@ -198,10 +194,8 @@ async def seed():
                     bookings_revenue=1800, membership_revenue=2999, total_revenue=4799),
         ]
         db.add_all(revenue_rows)
-
         await db.commit()
         print("Database seeded successfully with all data.")
-
 
 if __name__ == "__main__":
     asyncio.run(seed())
