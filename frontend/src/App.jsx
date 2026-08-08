@@ -301,6 +301,7 @@ export default function App() {
             <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#10b981' }}></div>
             <span className="text-xs font-medium" style={{ color: '#10b981' }}>AI Active</span>
           </div>
+        </div>
       </header>
 
       {/* Main content */}
