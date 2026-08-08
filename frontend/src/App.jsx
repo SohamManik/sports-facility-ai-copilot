@@ -3,8 +3,7 @@ import axios from 'axios'
 import ChatWindow from './components/ChatWindow'
 import PendingApprovals from './components/PendingApprovals'
 import AuditLog from './components/AuditLog'
-import LoginPage from './components/LoginPage'
-import { Sparkles, Shield, ScrollText, LogOut } from 'lucide-react'
+import { Sparkles, Shield, ScrollText } from 'lucide-react'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
 
@@ -18,17 +17,16 @@ function generateId() {
 
 export default function App() {
   // Auth state
-  const [vendor, setVendor] = useState(() => {
-    try {
-      const stored = localStorage.getItem('hobbyfi_vendor') || sessionStorage.getItem('hobbyfi_vendor')
-      return stored ? JSON.parse(stored) : null
-    } catch { return null }
+  const [vendor, setVendor] = useState({
+    id: 1,
+    name: "Kota Badminton Academy",
+    token: "mock-token"
   })
 
   const [messages, setMessages] = useState([
     {
       role: 'copilot',
-      text: 'Welcome to HobbyFi Copilot! I\'m your AI assistant for Kota Badminton Academy. Ask me about revenue, bookings, memberships, trials — or request changes and I\'ll prepare them for your approval.',
+      text: 'Welcome to Sports Facility AI Copilot! I\'m your AI assistant for Kota Badminton Academy. Ask me about revenue, bookings, memberships, trials — or request changes and I\'ll prepare them for your approval.',
       intent: 'SYSTEM'
     }
   ])
@@ -283,16 +281,7 @@ export default function App() {
     setConfirmActionId(null)
   }
 
-  const handleLogout = () => {
-    localStorage.removeItem('hobbyfi_vendor')
-    sessionStorage.removeItem('hobbyfi_vendor')
-    setVendor(null)
-  }
 
-  // Auth gate
-  if (!vendor) {
-    return <LoginPage onLogin={setVendor} />
-  }
 
   return (
     <div className="h-screen flex flex-col" style={{ background: 'var(--bg-primary)' }}>
@@ -303,7 +292,7 @@ export default function App() {
             <Sparkles size={18} color="white" />
           </div>
           <div>
-            <h1 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>HobbyFi Copilot</h1>
+            <h1 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Sports Facility AI Copilot</h1>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Kota Badminton Academy</p>
           </div>
         </div>
@@ -312,15 +301,6 @@ export default function App() {
             <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#10b981' }}></div>
             <span className="text-xs font-medium" style={{ color: '#10b981' }}>AI Active</span>
           </div>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
-            style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', cursor: 'pointer' }}
-          >
-            <LogOut size={13} />
-            Sign Out
-          </button>
-        </div>
       </header>
 
       {/* Main content */}
