@@ -5,7 +5,8 @@ import PendingApprovals from './components/PendingApprovals'
 import AuditLog from './components/AuditLog'
 import { Sparkles, Shield, ScrollText } from 'lucide-react'
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
+// Hardcoded for portfolio production deployment
+const API_BASE = 'https://sports-facility-ai-copilot.onrender.com'
 
 function generateId() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
