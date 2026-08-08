@@ -105,40 +105,39 @@ async def handle_write(message: str, vendor_id: int, chat_history: str, db, disa
             )
             if subquery_match:
                 name_pattern = subquery_match.group(1)
-                try:
-                    check_result = await db.execute(
-                        text("SELECT id, name FROM users WHERE name LIKE :pattern"),
-                        {"pattern": name_pattern}
-                    )
-                    matching_users = check_result.fetchall()
-                    if len(matching_users) == 0:
-                        return {
-                            "response": f"I couldn't find a user matching '{name_pattern.replace('%', '')}'.",
-                            "intent": "CONVERSATIONAL",
-                            "pending_action_id": None
+                # check if it matches 0, 1, or multiple users using ILIKE
+                check_result = await db.execute(
+                    text("SELECT id, name FROM users WHERE name ILIKE :pattern"),
+                    {"pattern": name_pattern}
+                )
+                matching_users = check_result.fetchall()
+                
+                if len(matching_users) == 0:
+                    return {
+                        "response": f"I couldn't find a user matching '{name_pattern.replace('%', '')}'.",
+                        "intent": "CONVERSATIONAL",
+                        "pending_action_id": None
+                    }
+                elif len(matching_users) > 1:
+                    # AMBIGUOUS — return JSON immediately (no streaming)
+                    options = [{"id": row[0], "description": f"{row[1]} (ID: {row[0]})"} for row in matching_users]
+                    return {
+                        "response": f"I found {len(matching_users)} users matching that name. Which one did you mean?",
+                        "intent": "AMBIGUOUS",
+                        "pending_action_id": None,
+                        "disambiguation_options": options,
+                        "disambiguation_context": {
+                            "action_sql": action_sql,
+                            "action_type": action_type,
+                            "human_readable": human_readable,
+                            "proposed_changes": proposed_changes
                         }
-                    elif len(matching_users) > 1:
-                        # AMBIGUOUS — return JSON immediately (no streaming)
-                        options = [{"id": row[0], "description": f"{row[1]} (ID: {row[0]})"} for row in matching_users]
-                        return {
-                            "response": f"I found {len(matching_users)} users matching that name. Which one did you mean?",
-                            "intent": "AMBIGUOUS",
-                            "pending_action_id": None,
-                            "disambiguation_options": options,
-                            "disambiguation_context": {
-                                "action_sql": action_sql,
-                                "action_type": action_type,
-                                "human_readable": human_readable,
-                                "proposed_changes": proposed_changes
-                            }
-                        }
-                    else:
-                        affected_user = matching_users[0][1]
-                        affected_user_id = matching_users[0][0]
-                        # We intentionally DO NOT replace the subquery here, so that if there are
-                        # multiple subqueries (e.g. for multiple users), SQLite can execute them all naturally.
-                except Exception as e:
-                    print("Preflight check failed:", e)
+                    }
+                else:
+                    affected_user = matching_users[0][1]
+                    affected_user_id = matching_users[0][0]
+                    # We intentionally DO NOT replace the subquery here, so that if there are
+                    # multiple subqueries (e.g. for multiple users), SQLite can execute them all naturally.
 
         # 6. Check for bulk operations (guardrail layer 4)
         bulk_check = check_bulk_operation(action_sql)
