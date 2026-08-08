@@ -56,7 +56,7 @@ async def handle_write(message: str, vendor_id: int, chat_history: str, db, disa
 
             # Replace the subquery with the explicit ID
             action_sql = re.sub(
-                r"\(SELECT\s+id\s+FROM\s+users\s+WHERE\s+name\s+LIKE\s+'[^']+'\)",
+                r"\(SELECT\s+id\s+FROM\s+users\s+WHERE\s+name\s+(?:I?LIKE)\s+'[^']+'\)",
                 str(selected_user_id),
                 action_sql,
                 count=1,
