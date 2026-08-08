@@ -67,7 +67,7 @@ async def handle_write(message: str, vendor_id: int, chat_history: str, db, disa
             # 1. Build prompt
             prompt = WRITE_ACTION_PROMPT.format(
                 vendor_id=vendor_id,
-                today="2026-07-09",
+                today=datetime.now().strftime("%Y-%m-%d"),
                 message=message
             )
 

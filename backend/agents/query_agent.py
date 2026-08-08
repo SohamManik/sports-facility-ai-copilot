@@ -22,10 +22,10 @@ llm = ChatNVIDIA(
 async def handle_read(message: str, vendor_id: int, chat_history: str, db) -> str:
     """Handle READ intent: generate SQL, validate, execute, format, mask PII."""
     try:
-        # 1. Build prompt
+        from datetime import datetime
         prompt = READ_SQL_PROMPT.format(
             vendor_id=vendor_id,
-            today="2026-07-09",
+            today=datetime.now().strftime("%Y-%m-%d"),
             chat_history=chat_history,
             message=message
         )
