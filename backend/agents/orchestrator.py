@@ -103,11 +103,16 @@ async def process_message_preflight(req, vendor_id: int, db):
         # Define graph nodes
         def classify_intent(state: PreflightState):
             intent_prompt = INTENT_CLASSIFICATION_PROMPT.format(chat_history=state["chat_history"], message=state["message"])
-            intent_response = llm.invoke(intent_prompt)
-            raw_intent = re.sub(r'[^A-Za-z_]', '', intent_response.content.strip()).upper()
-            if raw_intent == "OUTOFSCOPE": raw_intent = "OUT_OF_SCOPE"
-            valid_intents = {"READ", "WRITE", "CONVERSATIONAL", "OUT_OF_SCOPE", "POLICY"}
-            return {"intent": raw_intent if raw_intent in valid_intents else "OUT_OF_SCOPE"}
+            try:
+                intent_response = llm.invoke(intent_prompt)
+                raw_intent = re.sub(r'[^A-Za-z_]', '', intent_response.content.strip()).upper()
+                if raw_intent == "OUTOFSCOPE": raw_intent = "OUT_OF_SCOPE"
+                valid_intents = {"READ", "WRITE", "CONVERSATIONAL", "OUT_OF_SCOPE", "POLICY"}
+                return {"intent": raw_intent if raw_intent in valid_intents else "OUT_OF_SCOPE"}
+            except Exception as e:
+                # If NVIDIA API fails, return a custom error intent so we can surface it
+                print("NVIDIA API ERROR:", str(e))
+                return {"intent": "API_ERROR", "error": str(e)}
 
         # Build graph
         workflow = StateGraph(PreflightState)
@@ -122,6 +127,10 @@ async def process_message_preflight(req, vendor_id: int, db):
 
     if intent == "OUT_OF_SCOPE":
         return {"mode": "json", "payload": {"response": OUT_OF_SCOPE_RESPONSE, "intent": "OUT_OF_SCOPE", "pending_action_id": None}}
+        
+    if intent == "API_ERROR":
+        error_msg = final_state.get("error", "Unknown NVIDIA API Error")
+        return {"mode": "json", "payload": {"response": f"NVIDIA LLM Error: {error_msg}. Please verify your NVIDIA_API_KEY on Render.", "intent": "API_ERROR", "pending_action_id": None}}
 
     if intent in ("READ", "CONVERSATIONAL", "POLICY"):
         # READ and CONVERSATIONAL are always streamed
@@ -195,18 +204,22 @@ async def process_message_stream(preflight_result, vendor_id: int, db):
         yield send_event("status", "Thinking...")
         chat_history = preflight_result["chat_history"]
         conv_prompt = CONVERSATIONAL_PROMPT.format(chat_history=chat_history, message=message)
-        response_stream = llm.stream(conv_prompt)
         
-        full_text = ""
-        for chunk in response_stream:
-            if chunk.content:
-                full_text += chunk.content
-                yield send_event("token", chunk.content)
-                time.sleep(0.01)
-                
-        memory.chat_memory.add_user_message(message)
-        memory.chat_memory.add_ai_message(full_text)
-        yield send_event("message", {"response": full_text, "intent": "CONVERSATIONAL", "pending_action_id": None})
+        try:
+            response_stream = llm.stream(conv_prompt)
+            full_text = ""
+            for chunk in response_stream:
+                if chunk.content:
+                    full_text += chunk.content
+                    yield send_event("token", chunk.content)
+                    time.sleep(0.01)
+                    
+            memory.chat_memory.add_user_message(message)
+            memory.chat_memory.add_ai_message(full_text)
+            yield send_event("message", {"response": full_text, "intent": "CONVERSATIONAL", "pending_action_id": None})
+        except Exception as e:
+            err_msg = f"NVIDIA LLM Stream Error: {str(e)}"
+            yield send_event("message", {"response": err_msg, "intent": "API_ERROR", "pending_action_id": None})
         
     elif intent == "POLICY":
         yield send_event("status", "Checking policies...")
