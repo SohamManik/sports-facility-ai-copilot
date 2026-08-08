@@ -164,17 +164,18 @@ async def approve_action(action_id: int, db: AsyncSession = Depends(get_db)):
     
     try:
         await db.execute(text(action.action_sql))
+        
+        action.status = "approved"
+        action.resolved_at = datetime.utcnow()
+        
+        audit_entry = AuditLog(vendor_id=1, action_type=action.action_type, description=action.human_readable, approved_by="vendor")
+        db.add(audit_entry)
+        
         await db.commit()
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to execute action: {str(e)}")
     
-    action.status = "approved"
-    action.resolved_at = datetime.utcnow()
-    
-    audit_entry = AuditLog(vendor_id=1, action_type=action.action_type, description=action.human_readable, approved_by="vendor")
-    db.add(audit_entry)
-    await db.commit()
     return ApprovalResponse(success=True, message=f"✅ Done. {action.human_readable}")
 
 
