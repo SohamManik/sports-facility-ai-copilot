@@ -47,11 +47,12 @@ def check_multi_intent(message: str) -> bool:
 def send_event(event_type: str, data):
     return f"data: {json.dumps({'type': event_type, 'data': data})}\n\n"
 
-def send_token_stream(text_content: str):
+async def send_token_stream(text_content: str):
+    import asyncio
     words = text_content.split(" ")
     for i, word in enumerate(words):
         yield send_event("token", word + (" " if i < len(words) - 1 else ""))
-        time.sleep(0.02)
+        await asyncio.sleep(0.02)
 
 
 async def process_message_preflight(req, vendor_id: int, db):
@@ -179,7 +180,7 @@ async def process_message_stream(preflight_result, vendor_id: int, db):
         # Slash command — stream the pre-computed response
         yield send_event("status", "Executing slash command...")
         resp = preflight_result["response_text"]
-        yield from send_token_stream(resp)
+        async for chunk in send_token_stream(resp): yield chunk
         yield send_event("message", {"response": resp, "intent": "READ", "pending_action_id": None})
         return
 
@@ -189,7 +190,7 @@ async def process_message_stream(preflight_result, vendor_id: int, db):
         response_text = await handle_read(message, vendor_id, chat_history, db)
         memory.chat_memory.add_user_message(message)
         memory.chat_memory.add_ai_message(response_text)
-        yield from send_token_stream(response_text)
+        async for chunk in send_token_stream(response_text): yield chunk
         yield send_event("message", {"response": response_text, "intent": "READ", "pending_action_id": None})
 
     elif intent == "WRITE":
@@ -197,7 +198,7 @@ async def process_message_stream(preflight_result, vendor_id: int, db):
         result = preflight_result["write_result"]
         memory.chat_memory.add_user_message(message)
         memory.chat_memory.add_ai_message(result["response"])
-        yield from send_token_stream(result["response"])
+        async for chunk in send_token_stream(result["response"]): yield chunk
         yield send_event("message", result)
         
     elif intent == "CONVERSATIONAL":
@@ -227,6 +228,6 @@ async def process_message_stream(preflight_result, vendor_id: int, db):
         response_text = await handle_policy(message, chat_history)
         memory.chat_memory.add_user_message(message)
         memory.chat_memory.add_ai_message(response_text)
-        yield from send_token_stream(response_text)
+        async for chunk in send_token_stream(response_text): yield chunk
         yield send_event("message", {"response": response_text, "intent": "POLICY", "pending_action_id": None})
 
