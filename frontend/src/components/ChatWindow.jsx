@@ -1,15 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
 import MessageBubble from './MessageBubble'
-import { Send, Loader2, Command, Mic, Square } from 'lucide-react'
+import { Send, Command } from 'lucide-react'
 
 export default function ChatWindow({ messages, onSendMessage, isLoading, pendingActions, onApprove, onReject }) {
   const [input, setInput] = useState('')
   const [showCommands, setShowCommands] = useState(false)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
-  const mediaRecorderRef = useRef(null)
-  const [isRecording, setIsRecording] = useState(false)
-  const [isTranscribing, setIsTranscribing] = useState(false)
 
   const slashCommands = [
     { cmd: '/revenue', desc: "Today's revenue breakdown" },
@@ -48,53 +45,6 @@ export default function ChatWindow({ messages, onSendMessage, isLoading, pending
     onSendMessage(cmd)
     setInput('')
     setShowCommands(false)
-  }
-
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      mediaRecorderRef.current = new MediaRecorder(stream)
-      const chunks = []
-      
-      mediaRecorderRef.current.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data)
-      }
-      
-      mediaRecorderRef.current.onstop = async () => {
-        setIsTranscribing(true)
-        const blob = new Blob(chunks, { type: 'audio/webm' })
-        const formData = new FormData()
-        formData.append('file', blob, 'audio.webm')
-        
-        try {
-          const res = await fetch(`${import.meta.env.VITE_API_URL}/transcribe`, {
-            method: 'POST',
-            body: formData
-          })
-          const data = await res.json()
-          if (data.text) {
-            setInput(prev => prev + (prev ? ' ' : '') + data.text)
-          }
-        } catch (err) {
-          console.error("Transcription failed:", err)
-        } finally {
-          setIsTranscribing(false)
-          stream.getTracks().forEach(track => track.stop())
-        }
-      }
-      
-      mediaRecorderRef.current.start()
-      setIsRecording(true)
-    } catch (err) {
-      console.error("Microphone access denied:", err)
-    }
-  }
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop()
-      setIsRecording(false)
-    }
   }
 
   return (
@@ -196,15 +146,6 @@ export default function ChatWindow({ messages, onSendMessage, isLoading, pending
             disabled={!input.trim() || isLoading}
           >
             <Send size={16} />
-          </button>
-          <button
-            type="button"
-            className={`p-3 rounded-xl transition-all ${isRecording ? 'bg-red-500/20 text-red-500 animate-pulse' : 'bg-transparent text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]'}`}
-            onClick={isRecording ? stopRecording : startRecording}
-            disabled={isLoading || isTranscribing}
-            title={isRecording ? "Stop recording" : "Voice input"}
-          >
-            {isTranscribing ? <Loader2 size={16} className="animate-spin" /> : isRecording ? <Square size={16} /> : <Mic size={16} />}
           </button>
         </form>
       </div>

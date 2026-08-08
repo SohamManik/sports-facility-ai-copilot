@@ -70,7 +70,7 @@ async def handle_read(message: str, vendor_id: int, chat_history: str, db) -> st
             rows = result.fetchall()
             columns = list(result.keys())
         except Exception as e:
-            return "I encountered an error fetching that data. Please try again."
+            return f"I encountered an error fetching that data. Exception: {str(e)}\n\nQuery: {sql}"
 
         # 6. Check empty
         if len(rows) == 0:

@@ -99,7 +99,7 @@ async def handle_write(message: str, vendor_id: int, chat_history: str, db, disa
 
             # 5. Pre-flight SELECT check — runs BEFORE streaming begins
             subquery_match = re.search(
-                r"SELECT\s+id\s+FROM\s+users\s+WHERE\s+name\s+LIKE\s+'([^']+)'",
+                r"SELECT\s+id\s+FROM\s+users\s+WHERE\s+name\s+(?:I?LIKE)\s+'([^']+)'",
                 action_sql,
                 re.IGNORECASE
             )
@@ -205,4 +205,6 @@ async def handle_write(message: str, vendor_id: int, chat_history: str, db, disa
 
     except Exception as e:
         print("Write error:", e)
-        return {"response": "I encountered an error planning that action. Please try again.", "intent": "WRITE", "pending_action_id": None}
+        # Attempt to capture the action_sql if it was defined before the exception
+        sql_info = action_sql if 'action_sql' in locals() else 'unknown'
+        return {"response": f"I encountered an error planning that action. Exception: {str(e)}\n\nSQL: {sql_info}", "intent": "WRITE", "pending_action_id": None}
