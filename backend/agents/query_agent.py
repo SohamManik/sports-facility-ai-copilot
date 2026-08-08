@@ -105,12 +105,27 @@ async def handle_read(message: str, vendor_id: int, chat_history: str, db) -> st
         # 9. Mask PII
         masked = mask_pii(formatted)
 
-        # 10. Add explanation if available
-        explanation = parsed.get("explanation", "")
-        if explanation:
-            masked = f"{explanation}\n\n{masked}"
+        # 10. Generate conversational response using LLM
+        nlg_prompt = f"""
+You are the AI assistant for Kota Badminton Academy.
+The user asked: "{message}"
+The database returned this raw result:
+{masked}
 
-        return masked
+Write a brief, friendly, natural language response answering their question using this result.
+If the result is a single number representing money, format it with the ₹ symbol (e.g., ₹17,994).
+If the result is a list or table, write a very short introductory sentence (e.g. "Here are the recent bookings you requested:") and then APPEND the exact markdown table below it.
+Do NOT mention "database", "SQL", or "This fetches". Keep it natural and concise.
+"""
+        try:
+            final_response = llm.invoke(nlg_prompt).content
+            return final_response.strip()
+        except Exception:
+            # Fallback to robotic explanation if LLM fails
+            explanation = parsed.get("explanation", "")
+            if explanation:
+                return f"{explanation}\n\n{masked}"
+            return masked
 
     except Exception as e:
         return "I encountered an error processing your request. Please try again."
