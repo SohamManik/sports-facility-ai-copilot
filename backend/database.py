@@ -104,7 +104,11 @@ class AuditLog(Base):
 
 
 db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/hobbyfi")
-engine = create_async_engine(db_url)
+engine = create_async_engine(
+    db_url,
+    pool_pre_ping=True,
+    pool_recycle=300
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, class_=AsyncSession)
 
 async def init_db():

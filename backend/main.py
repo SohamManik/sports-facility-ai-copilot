@@ -38,6 +38,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from fastapi.responses import JSONResponse
+from fastapi.requests import Request
+from starlette.middleware.cors import CORSMiddleware
+import traceback
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print("GLOBAL EXCEPTION:", traceback.format_exc())
+    # Return JSON with CORS headers manually to prevent network errors on frontend
+    headers = {"Access-Control-Allow-Origin": "*"}
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal Server Error: {str(exc)}"},
+        headers=headers
+    )
 
 from cron import start_cron
 
