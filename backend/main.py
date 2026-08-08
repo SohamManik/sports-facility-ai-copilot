@@ -55,6 +55,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 from cron import start_cron
+from database import Base, engine
 
 @app.on_event("startup")
 async def startup():
@@ -63,6 +64,17 @@ async def startup():
     await seed_data.seed()
     start_cron()
 
+@app.post("/reset-db")
+async def reset_db():
+    """Reset the database to initial seed state."""
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+            await conn.run_sync(Base.metadata.create_all)
+        await seed_data.seed()
+        return {"success": True, "message": "Database reset successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi import UploadFile, File

@@ -3,7 +3,7 @@ import axios from 'axios'
 import ChatWindow from './components/ChatWindow'
 import PendingApprovals from './components/PendingApprovals'
 import AuditLog from './components/AuditLog'
-import { Sparkles, Shield, ScrollText } from 'lucide-react'
+import { Sparkles, Shield, ScrollText, RefreshCw } from 'lucide-react'
 
 // Hardcoded for portfolio production deployment
 const API_BASE = 'https://sports-facility-ai-copilot.onrender.com'
@@ -257,7 +257,8 @@ export default function App() {
           : msg
       ))
     } catch (err) {
-      showToast('Failed to approve action', 'error')
+      const errMsg = err.response?.data?.detail || 'Failed to approve action';
+      showToast(errMsg, 'error')
     }
   }
 
@@ -282,6 +283,18 @@ export default function App() {
     setConfirmActionId(null)
   }
 
+  const handleResetDb = async () => {
+    setIsLoading(true)
+    try {
+      const res = await axios.post(`${API_BASE}/reset-db`)
+      showToast('Database reset successfully! Reloading...', 'success')
+      setTimeout(() => window.location.reload(), 1500)
+    } catch (err) {
+      showToast('Failed to reset database', 'error')
+      setIsLoading(false)
+    }
+  }
+
 
 
   return (
@@ -298,6 +311,23 @@ export default function App() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={handleResetDb}
+            disabled={isLoading}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors border"
+            style={{ background: 'transparent', color: 'var(--text-secondary)', borderColor: 'var(--border-subtle)' }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'var(--bg-card-hover)';
+              e.currentTarget.style.color = 'var(--text-primary)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.color = 'var(--text-secondary)';
+            }}
+          >
+            <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
+            Reset Demo DB
+          </button>
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)' }}>
             <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#10b981' }}></div>
             <span className="text-xs font-medium" style={{ color: '#10b981' }}>AI Active</span>

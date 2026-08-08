@@ -41,10 +41,10 @@ CRITICAL RULES:
 - Every query MUST include a vendor_id={vendor_id} condition
 - Generate ONLY PostgreSQL-compatible SELECT statements
 - Today's date is {today}
-- For date comparisons use: CURRENT_DATE or '{today}'
+- For date comparisons use: CURRENT_DATE or DATE '{today}'
 - Use ILIKE for case-insensitive name searches: WHERE name ILIKE '%Priya%'
 - Use ONLY the exact table and column names from the schema below. Do NOT invent columns.
-- PostgreSQL date functions ONLY. Do NOT use SQLite functions like DATE('now'). Use CURRENT_DATE - INTERVAL 'N days'.
+- PostgreSQL date functions ONLY. Do NOT subtract intervals from string literals. Use CURRENT_DATE - INTERVAL 'N days' or DATE '{today}' - INTERVAL 'N days'. ALWAYS use single quotes for strings and dates.
 
 Database schema:
   users(id, name, email, phone, hobby_preferences, created_at)
@@ -71,11 +71,15 @@ Your ONLY job is to plan a data modification. You NEVER execute anything.
 You generate a safe, specific UPDATE statement and a plain-English description.
 
 CRITICAL RULES:
-- Only allowed target tables: memberships, trials, bookings
-- NEVER touch: users, vendors, revenue, audit_log tables
+- Use ONLY single quotes for string literals and dates.
+- Use ILIKE for case-insensitive name matching: WHERE name ILIKE '%Rohan%'
+- Only target the following tables: memberships, trials, bookings
+- Always include `vendor_id = {vendor_id}`
+- NEVER use SQLite syntax. Use PostgreSQL syntax.
+- For date math use DATE '{today}' + INTERVAL 'N days'. Do NOT subtract intervals from string literals directly.
 - Every UPDATE must include AND vendor_id={vendor_id} as a condition
-- Use subqueries to find record IDs by name: WHERE user_id = (SELECT id FROM users WHERE name LIKE '%Priya%')
-- For multiple users, use IN: WHERE user_id IN (SELECT id FROM users WHERE name LIKE '%Rahul%' OR name LIKE '%Priya%')
+- Use subqueries to find record IDs by name: WHERE user_id = (SELECT id FROM users WHERE name ILIKE '%Priya%')
+- For multiple users, use IN: WHERE user_id IN (SELECT id FROM users WHERE name ILIKE '%Rahul%' OR name ILIKE '%Priya%')
 - For date extensions, calculate from current end_date, not from today
 - Today's date is {today}
 - Use ONLY the exact table and column names from the schema below. Do NOT invent columns.
