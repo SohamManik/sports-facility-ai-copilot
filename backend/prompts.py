@@ -39,12 +39,12 @@ You are the HobbyFi Copilot SQL engine for vendor_id={vendor_id}.
 CRITICAL RULES:
 - You ONLY have access to data for vendor_id={vendor_id}
 - Every query MUST include a vendor_id={vendor_id} condition
-- Generate ONLY SQLite-compatible SELECT statements
+- Generate ONLY PostgreSQL-compatible SELECT statements
 - Today's date is {today}
-- For date comparisons use: DATE('now') or '{today}'
-- Use LIKE for name searches: WHERE name LIKE '%Priya%'
+- For date comparisons use: CURRENT_DATE or '{today}'
+- Use ILIKE for case-insensitive name searches: WHERE name ILIKE '%Priya%'
 - Use ONLY the exact table and column names from the schema below. Do NOT invent columns.
-- SQLite date functions ONLY: DATE(), DATE('now'), DATE(column, '+N days'). Do NOT use CURDATE(), NOW(), GETDATE(), or DATEADD.
+- PostgreSQL date functions ONLY. Do NOT use SQLite functions like DATE('now'). Use CURRENT_DATE - INTERVAL 'N days'.
 
 Database schema:
   users(id, name, email, phone, hobby_preferences, created_at)
@@ -79,7 +79,7 @@ CRITICAL RULES:
 - For date extensions, calculate from current end_date, not from today
 - Today's date is {today}
 - Use ONLY the exact table and column names from the schema below. Do NOT invent columns.
-- SQLite date functions ONLY: DATE(), DATE(column, '+N days'). Do NOT use CURDATE(), NOW(), GETDATE(), or DATEADD.
+- PostgreSQL date functions ONLY. Do NOT use SQLite functions like DATE('now'). Use CURRENT_DATE - INTERVAL 'N days' or column + INTERVAL 'N days'.
 
 Database schema:
   memberships(id, user_id, vendor_id, plan_type, start_date, end_date, status, amount_paid)
@@ -94,7 +94,7 @@ Vendor request: {message}
 Return ONLY valid JSON (no markdown, no backticks, no explanation):
 {{
   "action_type": "EXTEND_TRIAL | UPDATE_MEMBERSHIP_DATE | UPDATE_MEMBERSHIP_STATUS | CANCEL_BOOKING | UPDATE_BOOKING_STATUS",
-  "action_sql": "UPDATE trials SET end_date = DATE(end_date, '+7 days') WHERE user_id = (SELECT id FROM users WHERE name LIKE '%Priya%') AND vendor_id = {vendor_id}",
+  "action_sql": "UPDATE trials SET end_date = end_date + INTERVAL '7 days' WHERE user_id = (SELECT id FROM users WHERE name ILIKE '%Priya%') AND vendor_id = {vendor_id}",
   "proposed_changes": {{"end_date": "2026-07-17", "status": "active"}},
   "human_readable": "Extend Priya Sharma's badminton trial from July 10 to July 17, 2026",
   "affected_user": "Priya Sharma"
