@@ -162,21 +162,33 @@ async def approve_action(action_id: int, db: AsyncSession = Depends(get_db)):
     if not action or action.status != "pending":
         raise HTTPException(status_code=404, detail="Pending action not found.")
     
+    # Capture values BEFORE any commit (session may expire objects after commit)
+    action_sql = action.action_sql
+    action_type = action.action_type
+    human_readable = action.human_readable
+    
     try:
-        await db.execute(text(action.action_sql))
+        # Execute the business SQL
+        await db.execute(text(action_sql))
         
-        action.status = "approved"
-        action.resolved_at = datetime.utcnow()
+        # Update pending action status
+        await db.execute(
+            text("UPDATE pending_actions SET status = 'approved', resolved_at = NOW() WHERE id = :id"),
+            {"id": action_id}
+        )
         
-        audit_entry = AuditLog(vendor_id=1, action_type=action.action_type, description=action.human_readable, approved_by="vendor")
-        db.add(audit_entry)
+        # Write audit log
+        await db.execute(
+            text("INSERT INTO audit_log (vendor_id, action_type, description, approved_by) VALUES (:vid, :atype, :desc, 'vendor')"),
+            {"vid": 1, "atype": action_type, "desc": human_readable}
+        )
         
         await db.commit()
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to execute action: {str(e)}")
     
-    return ApprovalResponse(success=True, message=f"✅ Done. {action.human_readable}")
+    return ApprovalResponse(success=True, message=f"✅ Done. {human_readable}")
 
 
 @app.post("/reject-action/{action_id}", response_model=ApprovalResponse)
@@ -206,23 +218,41 @@ async def get_audit_log(db: AsyncSession = Depends(get_db)):
 @app.get("/insights")
 async def get_insights(db: AsyncSession = Depends(get_db)):
     insights = []
-    today_str = datetime.now().strftime("%Y-%m-%d")
     
-    t_res = await db.execute(text(f"SELECT COUNT(*) FROM trials WHERE vendor_id = 1 AND status = 'active' AND end_date <= date('{today_str}', '+2 days')"))
-    expiring_trials = t_res.scalar()
-    if expiring_trials > 0: insights.append(f"You have **{expiring_trials} trial(s)** expiring within 48 hours.")
+    # Use PostgreSQL INTERVAL syntax (not SQLite date())
+    try:
+        t_res = await db.execute(text(
+            "SELECT COUNT(*) FROM trials WHERE vendor_id = 1 AND status = 'active' AND end_date <= CURRENT_DATE + INTERVAL '2 days'"
+        ))
+        expiring_trials = t_res.scalar()
+        if expiring_trials and expiring_trials > 0:
+            insights.append(f"You have **{expiring_trials} trial(s)** expiring within 48 hours.")
+    except Exception as e:
+        print("Insights trials error:", e)
         
-    m_res = await db.execute(text(f"SELECT COUNT(*) FROM memberships WHERE vendor_id = 1 AND status = 'active' AND end_date <= date('{today_str}', '+7 days')"))
-    expiring_memberships = m_res.scalar()
-    if expiring_memberships > 0: insights.append(f"You have **{expiring_memberships} membership(s)** expiring within 7 days.")
+    try:
+        m_res = await db.execute(text(
+            "SELECT COUNT(*) FROM memberships WHERE vendor_id = 1 AND status = 'active' AND end_date <= CURRENT_DATE + INTERVAL '7 days'"
+        ))
+        expiring_memberships = m_res.scalar()
+        if expiring_memberships and expiring_memberships > 0:
+            insights.append(f"You have **{expiring_memberships} membership(s)** expiring within 7 days.")
+    except Exception as e:
+        print("Insights memberships error:", e)
         
-    rev_res = await db.execute(text(f"SELECT (SELECT total_revenue FROM revenue WHERE vendor_id = 1 AND date = '{today_str}') as today_rev, (SELECT AVG(total_revenue) FROM revenue WHERE vendor_id = 1 AND date >= date('{today_str}', '-7 days')) as avg_rev"))
-    rev_row = rev_res.fetchone()
-    if rev_row and rev_row[0] is not None and rev_row[1] is not None:
-        today_rev, avg_rev = rev_row[0], rev_row[1]
-        if today_rev < avg_rev * 0.8:
-            drop_pct = int((1 - (today_rev / avg_rev)) * 100)
-            insights.append(f"Today's revenue (₹{today_rev}) is tracking **{drop_pct}% below** your 7-day average (₹{int(avg_rev)}).")
+    try:
+        rev_res = await db.execute(text(
+            "SELECT (SELECT total_revenue FROM revenue WHERE vendor_id = 1 AND date = CURRENT_DATE) as today_rev, "
+            "(SELECT AVG(total_revenue) FROM revenue WHERE vendor_id = 1 AND date >= CURRENT_DATE - INTERVAL '7 days') as avg_rev"
+        ))
+        rev_row = rev_res.fetchone()
+        if rev_row and rev_row[0] is not None and rev_row[1] is not None:
+            today_rev, avg_rev = rev_row[0], rev_row[1]
+            if today_rev < avg_rev * 0.8:
+                drop_pct = int((1 - (today_rev / avg_rev)) * 100)
+                insights.append(f"Today's revenue (₹{today_rev}) is tracking **{drop_pct}% below** your 7-day average (₹{int(avg_rev)}).")
+    except Exception as e:
+        print("Insights revenue error:", e)
             
     if not insights:
         return {"has_insights": False, "message": ""}
