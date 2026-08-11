@@ -38,7 +38,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.requests import Request
 from starlette.middleware.cors import CORSMiddleware
 import traceback
@@ -80,46 +80,6 @@ async def reset_db():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-from fastapi.responses import StreamingResponse, JSONResponse
-from fastapi import UploadFile, File
-import json
-import httpx
-
-@app.post("/transcribe")
-async def transcribe(file: UploadFile = File(...)):
-    # NVIDIA NIM Whisper API implementation
-    api_key = os.getenv("NVIDIA_API_KEY")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="NVIDIA_API_KEY not configured.")
-    
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-    }
-    
-    # Write temp file for httpx upload
-    content = await file.read()
-    
-    # According to NVIDIA NIM Whisper docs, the endpoint is usually:
-    url = "https://ai.api.nvidia.com/v1/audio/transcriptions"
-    
-    files = {
-        "file": (file.filename, content, file.content_type)
-    }
-    data = {
-        "model": "nvidia/nemotron-4-340b-instruct", # placeholder if whisper name varies, but typically 'whisper'
-    }
-    
-    # Fallback to standard OpenAI compatible Whisper endpoint name
-    data["model"] = "openai/whisper-large-v3"
-    
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(url, headers=headers, files=files, data=data, timeout=30.0)
-            response.raise_for_status()
-            res_json = response.json()
-            return {"text": res_json.get("text", "")}
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/login", response_model=LoginResponse)
