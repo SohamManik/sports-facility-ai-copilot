@@ -69,8 +69,12 @@ async def reset_db():
     """Reset the database to initial seed state."""
     try:
         async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.drop_all)
-            await conn.run_sync(Base.metadata.create_all)
+            # TRUNCATE with CASCADE handles FK constraints correctly in Postgres
+            # (drop_all can fail on FK ordering; truncate is faster and safer)
+            await conn.execute(text("""
+                TRUNCATE TABLE audit_log, pending_actions, revenue, bookings, memberships, trials, users, vendors
+                RESTART IDENTITY CASCADE
+            """))
         await seed_data.seed()
         return {"success": True, "message": "Database reset successfully."}
     except Exception as e:

@@ -98,8 +98,10 @@ async def handle_write(message: str, vendor_id: int, chat_history: str, db, disa
                 }
 
             # 5. Pre-flight SELECT check — runs BEFORE streaming begins
+            # Matches both:  = (SELECT id FROM users WHERE name ILIKE '%X%')
+            #           and IN (SELECT id FROM users WHERE name ILIKE '%X%')
             subquery_match = re.search(
-                r"SELECT\s+id\s+FROM\s+users\s+WHERE\s+name\s+(?:I?LIKE)\s+'([^']+)'",
+                r"(?:=|\bIN\b)\s*\(\s*SELECT\s+id\s+FROM\s+users\s+WHERE\s+name\s+(?:I?LIKE)\s+'([^']+)'\s*\)",
                 action_sql,
                 re.IGNORECASE
             )
@@ -111,10 +113,11 @@ async def handle_write(message: str, vendor_id: int, chat_history: str, db, disa
                     {"pattern": name_pattern}
                 )
                 matching_users = check_result.fetchall()
+                print(f"[PREFLIGHT] pattern={name_pattern!r} → {len(matching_users)} match(es): {[r[1] for r in matching_users]}")
                 
                 if len(matching_users) == 0:
                     return {
-                        "response": f"I couldn't find a user matching '{name_pattern.replace('%', '')}'.",
+                        "response": f"I couldn't find a user matching '{name_pattern.replace('%', '')}'. Please check the name and try again.",
                         "intent": "CONVERSATIONAL",
                         "pending_action_id": None
                     }
@@ -134,10 +137,18 @@ async def handle_write(message: str, vendor_id: int, chat_history: str, db, disa
                         }
                     }
                 else:
+                    # Exactly 1 match — replace the subquery with the concrete ID
+                    # This prevents any risk of Postgres running a multi-row subquery
                     affected_user = matching_users[0][1]
                     affected_user_id = matching_users[0][0]
-                    # We intentionally DO NOT replace the subquery here, so that if there are
-                    # multiple subqueries (e.g. for multiple users), SQLite can execute them all naturally.
+                    action_sql = re.sub(
+                        r"(?:=|\bIN\b)\s*\(\s*SELECT\s+id\s+FROM\s+users\s+WHERE\s+name\s+(?:I?LIKE)\s+'[^']+'\s*\)",
+                        f"= {affected_user_id}",
+                        action_sql,
+                        count=1,
+                        flags=re.IGNORECASE
+                    )
+                    print(f"[PREFLIGHT] Resolved to user_id={affected_user_id} ({affected_user}). SQL: {action_sql}")
 
         # 6. Check for bulk operations (guardrail layer 4)
         bulk_check = check_bulk_operation(action_sql)
