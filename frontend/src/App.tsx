@@ -1,111 +1,109 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import axios from 'axios'
+import axios, { AxiosError } from 'axios'
 import ChatWindow from './components/ChatWindow'
 import PendingApprovals from './components/PendingApprovals'
 import AuditLog from './components/AuditLog'
 import { Sparkles, Shield, ScrollText, RefreshCw } from 'lucide-react'
+import type {
+  Message,
+  PendingAction,
+  AuditLogEntry,
+  DisambiguationContext,
+  ChatApiResponse,
+  InsightsResponse,
+} from './types'
 
 // Hardcoded for portfolio production deployment
 const API_BASE = 'https://sports-facility-ai-copilot.onrender.com'
 
-function generateId() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0
-    const v = c === 'x' ? r : (r & 0x3 | 0x8)
+function generateId(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
     return v.toString(16)
   })
 }
 
+const WELCOME_MESSAGE: Message = {
+  role: 'copilot',
+  text: "Welcome to Sports Facility AI Copilot! I'm your AI assistant for Kota Badminton Academy. Ask me about revenue, bookings, memberships, trials — or request changes and I'll prepare them for your approval.",
+  intent: 'SYSTEM',
+}
+
+type ActiveTab = 'approvals' | 'audit'
+
 export default function App() {
-  // Auth state
-  const [vendor, setVendor] = useState({
-    id: 1,
-    name: "Kota Badminton Academy",
-    token: "mock-token"
-  })
+  const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE])
+  const [pendingActions, setPendingActions] = useState<PendingAction[]>([])
+  const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([])
+  const [activeTab, setActiveTab] = useState<ActiveTab>('approvals')
+  const [isLoading, setIsLoading] = useState<boolean>(false)
+  const [sessionId] = useState<string>(() => generateId())
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const [confirmActionId, setConfirmActionId] = useState<number | null>(null)
+  const insightsFetched = useRef<boolean>(false)
 
-  const [messages, setMessages] = useState([
-    {
-      role: 'copilot',
-      text: 'Welcome to Sports Facility AI Copilot! I\'m your AI assistant for Kota Badminton Academy. Ask me about revenue, bookings, memberships, trials — or request changes and I\'ll prepare them for your approval.',
-      intent: 'SYSTEM'
-    }
-  ])
-  const [pendingActions, setPendingActions] = useState([])
-  const [auditLog, setAuditLog] = useState([])
-  const [activeTab, setActiveTab] = useState('approvals')
-  const [isLoading, setIsLoading] = useState(false)
-  const [sessionId] = useState(() => generateId())
-  const [toast, setToast] = useState(null)
-  const [confirmActionId, setConfirmActionId] = useState(null)
-  const insightsFetched = useRef(false)  // Guard against StrictMode double-fetch
-
-  const showToast = useCallback((message, type = 'success') => {
+  const showToast = useCallback((message: string, type: 'success' | 'error' = 'success'): void => {
     setToast({ message, type })
     setTimeout(() => setToast(null), 3000)
   }, [])
 
-  const fetchPendingActions = useCallback(async () => {
+  const fetchPendingActions = useCallback(async (): Promise<void> => {
     try {
-      const res = await axios.get(`${API_BASE}/pending-actions`)
+      const res = await axios.get<PendingAction[]>(`${API_BASE}/pending-actions`)
       setPendingActions(res.data)
     } catch (err) {
       console.error('Failed to fetch pending actions:', err)
     }
   }, [])
 
-  const fetchAuditLog = useCallback(async () => {
+  const fetchAuditLog = useCallback(async (): Promise<void> => {
     try {
-      const res = await axios.get(`${API_BASE}/audit-log`)
+      const res = await axios.get<AuditLogEntry[]>(`${API_BASE}/audit-log`)
       setAuditLog(res.data)
     } catch (err) {
       console.error('Failed to fetch audit log:', err)
     }
   }, [])
 
-  const fetchInsights = useCallback(async () => {
-    if (insightsFetched.current) return  // Prevent StrictMode double-call
+  const fetchInsights = useCallback(async (): Promise<void> => {
+    if (insightsFetched.current) return
     insightsFetched.current = true
     try {
-      const res = await axios.get(`${API_BASE}/insights`)
+      const res = await axios.get<InsightsResponse>(`${API_BASE}/insights`)
       if (res.data.has_insights) {
         setMessages(prev => [...prev, {
           role: 'copilot',
           text: res.data.message,
-          intent: 'PROACTIVE_INSIGHT'
+          intent: 'PROACTIVE_INSIGHT',
         }])
       }
     } catch (err) {
       console.error('Failed to fetch insights:', err)
-      insightsFetched.current = false  // Allow retry on error
+      insightsFetched.current = false
     }
   }, [])
 
-  // Fetch on mount (only when authenticated)
   useEffect(() => {
-    if (!vendor) return
     fetchAuditLog()
     fetchInsights()
-  }, [vendor, fetchAuditLog, fetchInsights])
+  }, [fetchAuditLog, fetchInsights])
 
-  // Poll pending actions every 5 seconds
   useEffect(() => {
-    if (!vendor) return
     fetchPendingActions()
     const interval = setInterval(fetchPendingActions, 5000)
     return () => clearInterval(interval)
-  }, [vendor, fetchPendingActions])
+  }, [fetchPendingActions])
 
-  const sendMessage = async (text, disambiguationContext = null) => {
-    let displayText = text
-    if (disambiguationContext) {
-      displayText = `Selected: ${disambiguationContext.selected_user_name}`
-    }
+  const sendMessage = async (text: string, disambiguationContext?: DisambiguationContext): Promise<void> => {
+    const displayText = disambiguationContext
+      ? `Selected: ${disambiguationContext.selected_user_name ?? ''}`
+      : text
 
     setMessages(prev => [
       ...prev,
       { role: 'vendor', text: displayText, intent: '' },
-      { role: 'copilot', text: '', intent: '', status: 'Thinking...' }
+      { role: 'copilot', text: '', intent: '', status: 'Thinking...' },
     ])
     setIsLoading(true)
 
@@ -116,186 +114,180 @@ export default function App() {
         body: JSON.stringify({
           message: text,
           session_id: sessionId,
-          disambiguation_context: disambiguationContext
-        })
+          disambiguation_context: disambiguationContext ?? null,
+        }),
       })
 
-      const contentType = response.headers.get('content-type') || ''
+      const contentType = response.headers.get('content-type') ?? ''
 
       if (!response.ok) {
         let errMsg = 'Something went wrong on the server.'
         if (contentType.includes('application/json')) {
-          const errData = await response.json()
-          errMsg = errData.detail || errData.response || errMsg
+          const errData = (await response.json()) as { detail?: string; response?: string }
+          errMsg = errData.detail ?? errData.response ?? errMsg
         }
         setMessages(prev => {
-          const newMsg = [...prev]
-          const lastIdx = newMsg.length - 1
-          newMsg[lastIdx] = { ...newMsg[lastIdx], text: errMsg, intent: 'CONVERSATIONAL', status: null }
-          return newMsg
+          const next = [...prev]
+          const last = { ...next[next.length - 1], text: errMsg, intent: 'CONVERSATIONAL' as const, status: null }
+          next[next.length - 1] = last
+          return next
         })
         setIsLoading(false)
         return
       }
 
       if (contentType.includes('application/json')) {
-        // JSON response — errors, guardrail blocks, disambiguation
-        const data = await response.json()
+        const data = (await response.json()) as ChatApiResponse
 
         setMessages(prev => {
-          const newMsg = [...prev]
-          const lastIdx = newMsg.length - 1
-          // Deep-clone to avoid StrictMode double-mutation
-          const updated = { ...newMsg[lastIdx] }
-          updated.text = data.response
-          updated.intent = data.intent
-          updated.pending_action_id = data.pending_action_id
-          updated.status = null
-
+          const next = [...prev]
+          const updated: Message = {
+            ...next[next.length - 1],
+            text: data.response,
+            intent: data.intent,
+            pending_action_id: data.pending_action_id,
+            status: null,
+          }
           if (data.disambiguation_options) {
             updated.disambiguationOptions = data.disambiguation_options
             updated.disambiguationContext = data.disambiguation_context
           }
-          newMsg[lastIdx] = updated
-          return newMsg
+          next[next.length - 1] = updated
+          return next
         })
 
         if (data.pending_action_id) {
           fetchPendingActions()
           setActiveTab('approvals')
         }
-
       } else {
-        // SSE stream — normal READ/WRITE responses
-        const reader = response.body.getReader()
+        // SSE stream
+        const reader = response.body!.getReader()
         const decoder = new TextDecoder()
         let done = false
 
         while (!done) {
           const { value, done: doneReading } = await reader.read()
           done = doneReading
-          if (value) {
-            const chunk = decoder.decode(value, { stream: true })
-            const events = chunk.split('\n\n')
+          if (!value) continue
 
-            for (const event of events) {
-              if (event.startsWith('data: ')) {
-                try {
-                  const dataStr = event.slice(6)
-                  const payload = JSON.parse(dataStr)
+          const chunk = decoder.decode(value, { stream: true })
+          const events = chunk.split('\n\n')
 
-                  setMessages(prev => {
-                    const newMsg = [...prev]
-                    const lastIdx = newMsg.length - 1
-                    // Deep-clone the last message to prevent StrictMode double-mutation
-                    const updated = { ...newMsg[lastIdx] }
+          for (const event of events) {
+            if (!event.startsWith('data: ')) continue
+            try {
+              const payload = JSON.parse(event.slice(6)) as {
+                type: 'status' | 'token' | 'message'
+                data: string | ChatApiResponse
+              }
 
-                    if (payload.type === 'status') {
-                      updated.status = payload.data
-                    } else if (payload.type === 'token') {
-                      updated.text = (updated.text || '') + payload.data
-                      updated.status = null
-                    } else if (payload.type === 'message') {
-                      if (!updated.text && payload.data.response) {
-                        updated.text = payload.data.response
-                      }
-                      updated.intent = payload.data.intent
-                      updated.pending_action_id = payload.data.pending_action_id
-                      updated.status = null
-                    }
+              setMessages(prev => {
+                const next = [...prev]
+                const updated = { ...next[next.length - 1] }
 
-                    newMsg[lastIdx] = updated
-                    return newMsg
-                  })
+                if (payload.type === 'status') {
+                  updated.status = payload.data as string
+                } else if (payload.type === 'token') {
+                  updated.text = (updated.text ?? '') + (payload.data as string)
+                  updated.status = null
+                } else if (payload.type === 'message') {
+                  const msgData = payload.data as ChatApiResponse
+                  if (!updated.text && msgData.response) updated.text = msgData.response
+                  updated.intent = msgData.intent
+                  updated.pending_action_id = msgData.pending_action_id
+                  updated.status = null
+                }
 
-                  if (payload.type === 'message' && payload.data.pending_action_id) {
-                    fetchPendingActions()
-                    setActiveTab('approvals')
-                  }
-                } catch (e) {
-                  // Ignore parse errors from incomplete chunks
+                next[next.length - 1] = updated
+                return next
+              })
+
+              if (payload.type === 'message') {
+                const msgData = payload.data as ChatApiResponse
+                if (msgData.pending_action_id) {
+                  fetchPendingActions()
+                  setActiveTab('approvals')
                 }
               }
+            } catch {
+              // Ignore parse errors from incomplete SSE chunks
             }
           }
         }
       }
     } catch (err) {
+      console.error('Chat error:', err)
       setMessages(prev => {
-        const newMsg = [...prev]
-        const updated = { ...newMsg[newMsg.length - 1] }
-        updated.text = 'Sorry, I encountered an error. Please try again.'
-        updated.intent = 'ERROR'
-        updated.status = null
-        newMsg[newMsg.length - 1] = updated
-        return newMsg
+        const next = [...prev]
+        next[next.length - 1] = {
+          ...next[next.length - 1],
+          text: 'Sorry, I encountered an error. Please try again.',
+          intent: 'ERROR',
+          status: null,
+        }
+        return next
       })
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleApprove = async (actionId) => {
-    // If not confirmed yet, just open the modal
+  const handleApprove = async (actionId: number): Promise<void> => {
     if (confirmActionId !== actionId) {
       setConfirmActionId(actionId)
       return
     }
 
     try {
-      const res = await axios.post(`${API_BASE}/approve-action/${actionId}`)
+      const res = await axios.post<{ success: boolean; message: string }>(`${API_BASE}/approve-action/${actionId}`)
       showToast(res.data.message, 'success')
       fetchPendingActions()
       fetchAuditLog()
-      
       setConfirmActionId(null)
 
-      // Update chat badge
-      setMessages(prev => prev.map(msg => 
-        msg.pending_action_id === actionId 
-          ? { ...msg, intent: 'WRITE_APPROVED' } 
-          : msg
-      ))
+      setMessages(prev =>
+        prev.map(msg =>
+          msg.pending_action_id === actionId ? { ...msg, intent: 'WRITE_APPROVED' } : msg
+        )
+      )
     } catch (err) {
-      const errMsg = err.response?.data?.detail || 'Failed to approve action';
+      const axiosErr = err as AxiosError<{ detail?: string }>
+      const errMsg = axiosErr.response?.data?.detail ?? 'Failed to approve action'
       showToast(errMsg, 'error')
     }
   }
 
-  const handleReject = async (actionId) => {
+  const handleReject = async (actionId: number): Promise<void> => {
     try {
       await axios.post(`${API_BASE}/reject-action/${actionId}`)
       showToast('Action rejected', 'success')
       fetchPendingActions()
-      
-      // Update chat badge
-      setMessages(prev => prev.map(msg => 
-        msg.pending_action_id === actionId 
-          ? { ...msg, intent: 'WRITE_REJECTED' } 
-          : msg
-      ))
-    } catch (err) {
+      setMessages(prev =>
+        prev.map(msg =>
+          msg.pending_action_id === actionId ? { ...msg, intent: 'WRITE_REJECTED' } : msg
+        )
+      )
+    } catch {
       showToast('Failed to reject action', 'error')
     }
   }
 
-  const cancelApprove = () => {
+  const cancelApprove = (): void => {
     setConfirmActionId(null)
   }
 
-  const handleResetDb = async () => {
+  const handleResetDb = async (): Promise<void> => {
     setIsLoading(true)
     try {
-      const res = await axios.post(`${API_BASE}/reset-db`)
+      await axios.post(`${API_BASE}/reset-db`)
       showToast('Database reset successfully! Reloading...', 'success')
       setTimeout(() => window.location.reload(), 1500)
-    } catch (err) {
+    } catch {
       showToast('Failed to reset database', 'error')
       setIsLoading(false)
     }
   }
-
-
 
   return (
     <div className="h-screen flex flex-col" style={{ background: 'var(--bg-primary)' }}>
@@ -317,19 +309,19 @@ export default function App() {
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors border"
             style={{ background: 'transparent', color: 'var(--text-secondary)', borderColor: 'var(--border-subtle)' }}
             onMouseEnter={e => {
-              e.currentTarget.style.background = 'var(--bg-card-hover)';
-              e.currentTarget.style.color = 'var(--text-primary)';
+              e.currentTarget.style.background = 'var(--bg-card-hover)'
+              e.currentTarget.style.color = 'var(--text-primary)'
             }}
             onMouseLeave={e => {
-              e.currentTarget.style.background = 'transparent';
-              e.currentTarget.style.color = 'var(--text-secondary)';
+              e.currentTarget.style.background = 'transparent'
+              e.currentTarget.style.color = 'var(--text-secondary)'
             }}
           >
-            <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
+            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
             Reset Demo DB
           </button>
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)' }}>
-            <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#10b981' }}></div>
+            <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#10b981' }} />
             <span className="text-xs font-medium" style={{ color: '#10b981' }}>AI Active</span>
           </div>
         </div>
@@ -403,7 +395,7 @@ export default function App() {
       )}
 
       {/* Confirmation Modal */}
-      {confirmActionId && (
+      {confirmActionId !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 animate-fade-in">
           <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] p-6 rounded-2xl shadow-lg w-full max-w-sm">
             <h2 className="text-lg font-bold text-[var(--text-primary)] mb-2">Confirm Action</h2>

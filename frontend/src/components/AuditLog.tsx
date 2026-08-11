@@ -1,6 +1,16 @@
 import { FileText, Clock, CheckCircle } from 'lucide-react'
+import type { AuditLogEntry } from '../types'
 
-function formatTime(dateStr) {
+interface AuditLogProps {
+  entries: AuditLogEntry[]
+}
+
+interface BadgeConfig {
+  label: string
+  className: string
+}
+
+function formatTime(dateStr: string): string {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   return d.toLocaleString('en-IN', {
@@ -12,14 +22,14 @@ function formatTime(dateStr) {
   })
 }
 
-function getBadgeConfig(actionType) {
+function getBadgeConfig(actionType: string): BadgeConfig {
   const type = (actionType || '').toUpperCase()
   if (type.includes('EXTEND')) return { label: 'EXTEND', className: 'badge-blue' }
   if (type.includes('CANCEL')) return { label: 'CANCEL', className: 'badge-red' }
   return { label: type.replace(/_/g, ' '), className: 'badge-amber' }
 }
 
-export default function AuditLog({ entries }) {
+export default function AuditLog({ entries }: AuditLogProps) {
   if (!entries || entries.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center py-12">
